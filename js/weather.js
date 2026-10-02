@@ -153,19 +153,20 @@ function nameVariants(name) {
   return [...new Set([name, bare, toSlug(bare), bare.replace(/-/g, " ")])].filter(Boolean);
 }
 
-/** Looks up the coordinates of a city, by name or by the index slug. */
+/**
+ * Looks up the coordinates of a city, by name or by the index slug.
+ *
+ * An unknown city comes back as `200` with no results, so only that outcome is
+ * worth another spelling. Transport failures and throttling are rethrown as they
+ * are: retrying them would report a network outage as a missing city and would
+ * multiply the request count exactly when the API is asking us to slow down.
+ */
 async function geocode(name, signal) {
   for (const query of nameVariants(name)) {
-    let data;
-    try {
-      const url = `${GEOCODE_URL}?name=${encodeURIComponent(query)}&count=1&language=fr&format=json`;
-      data = await getJson(url, signal);
-    } catch (error) {
-      if (error.name === "AbortError") throw error;
-      continue;
-    }
-
+    const url = `${GEOCODE_URL}?name=${encodeURIComponent(query)}&count=1&language=fr&format=json`;
+    const data = await getJson(url, signal);
     const place = data.results?.[0];
+
     if (place) return { latitude: place.latitude, longitude: place.longitude, elevation: place.elevation };
   }
 
