@@ -16,6 +16,8 @@
  *     hours: [ { hour, temp, wind, windDir, humidity, condition, icon } x24 ] }
  */
 
+import { toSlug } from "./text.js";
+
 const GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search";
 const FORECAST_URL = "https://api.open-meteo.com/v1/forecast";
 
@@ -138,15 +140,36 @@ async function getJson(url, signal) {
   return response.json();
 }
 
+/**
+ * Query variants tried in order until one resolves.
+ *
+ * 10% of the index carries a postal suffix to separate homonyms, as in
+ * `Avon (77)` versus `Avon (79)`, and the geocoder cannot parse it. Those names
+ * are retried bare, then without accents, then with hyphens as spaces. Homonyms
+ * left ambiguous this way resolve to whichever match the geocoder ranks first.
+ */
+function nameVariants(name) {
+  const bare = name.replace(/\s*\(\w+\)\s*$/, "").trim();
+  return [...new Set([name, bare, toSlug(bare), bare.replace(/-/g, " ")])].filter(Boolean);
+}
+
 /** Looks up the coordinates of a city, by name or by the index slug. */
-async function geocode(query, signal) {
-  const url = `${GEOCODE_URL}?name=${encodeURIComponent(query)}&count=1&language=fr&format=json`;
-  const data = await getJson(url, signal);
-  const place = data.results?.[0];
+async function geocode(name, signal) {
+  for (const query of nameVariants(name)) {
+    let data;
+    try {
+      const url = `${GEOCODE_URL}?name=${encodeURIComponent(query)}&count=1&language=fr&format=json`;
+      data = await getJson(url, signal);
+    } catch (error) {
+      if (error.name === "AbortError") throw error;
+      continue;
+    }
 
-  if (!place) throw new Error(`Ville introuvable : ${query}`);
+    const place = data.results?.[0];
+    if (place) return { latitude: place.latitude, longitude: place.longitude, elevation: place.elevation };
+  }
 
-  return { latitude: place.latitude, longitude: place.longitude, elevation: place.elevation };
+  throw new Error(`Ville introuvable : ${name}`);
 }
 
 /* ------------------------------------------------------------------- cache */

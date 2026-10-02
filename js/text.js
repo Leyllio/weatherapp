@@ -28,3 +28,18 @@ export function toAscii(text) {
 export function toSlug(text) {
   return deaccent(text).toLowerCase().trim();
 }
+
+/**
+ * Uppercases the first letter and leaves the rest untouched.
+ *
+ * The city index stores names the way their postal service writes them, so some
+ * start lowercase and some start with a leading article apostrophe, as in
+ * `'s Gravenvoeren`. Leading punctuation is skipped so the first letter is what
+ * gets capitalised, not the apostrophe before it.
+ */
+export function capitalize(text) {
+  const value = String(text);
+  const index = value.search(/\p{L}/u);
+  if (index < 0) return value;
+  return value.slice(0, index) + value[index].toLocaleUpperCase("fr") + value.slice(index + 1);
+}

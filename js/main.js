@@ -8,6 +8,7 @@
  */
 
 import { el } from "./dom.js";
+import { capitalize } from "./text.js";
 import { initTheme } from "./theme.js";
 import { createRain } from "./rain.js";
 import { searchCities, findCity, prefetchCities } from "./cities.js";
@@ -122,7 +123,7 @@ async function show(city) {
     const data = await fetchWeather(city.url, city.name);
     if (run !== generation) return;
 
-    localStorage.setItem(LAST_CITY_KEY, city.url);
+    localStorage.setItem(LAST_CITY_KEY, JSON.stringify({ url: city.url, name: city.name }));
     renderWeather(app, data);
   } catch (error) {
     if (run !== generation || error.name === "AbortError") return;
@@ -178,10 +179,28 @@ document.addEventListener("click", (event) => {
 
 /* ------------------------------------------------------------------- boot */
 
+/**
+ * Last selected city, so a reload restores the name as it was displayed.
+ * Falls back to treating an older bare slug as both name and key.
+ */
+function readLastCity() {
+  const raw = localStorage.getItem(LAST_CITY_KEY);
+  if (!raw) return null;
+
+  try {
+    const saved = JSON.parse(raw);
+    if (saved?.url) return { url: saved.url, name: capitalize(saved.name ?? saved.url) };
+  } catch {
+    /* Written before the name was stored: a bare slug. */
+  }
+
+  return { url: raw, name: capitalize(raw) };
+}
+
 initTheme();
 createRain();
 prefetchCities();
 app.replaceChildren(placeholderCard());
 
-const lastCity = localStorage.getItem(LAST_CITY_KEY);
-if (lastCity) show({ name: lastCity, url: lastCity });
+const lastCity = readLastCity();
+if (lastCity) show(lastCity);

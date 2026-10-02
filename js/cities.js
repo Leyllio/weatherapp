@@ -6,7 +6,7 @@
  * `key`, `name`, `country code`, `postal code`, `slug`.
  */
 
-import { toSlug } from "./text.js";
+import { toSlug, capitalize } from "./text.js";
 
 const FILE_URL = new URL("../data/cities.txt", import.meta.url);
 
@@ -38,7 +38,7 @@ function loadRows() {
         .filter(Boolean)
         .map((line) => {
           const [key, name, country, npa, url] = line.split("\t");
-          return { key, name, country: COUNTRIES[country] ?? country, npa, url };
+          return { key, name: capitalize(name), country: COUNTRIES[country] ?? country, npa, url };
         }),
     );
 
