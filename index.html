@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="fr" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WeatherApp</title>
+    <link rel="icon" href="img/favicon.svg" type="image/svg+xml" />
+    <meta name="description" content="WeatherApp - meteo par ville et par heure." />
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <header class="app-banner">
+      <div class="banner-brand">
+        <span class="rain-layer" aria-hidden="true"></span>
+        <span class="logo">WeatherApp</span>
+        <span class="logo-mark" aria-hidden="true"></span>
+      </div>
+      <div class="banner-tools">
+        <div id="menu">
+          <input
+            type="text"
+            id="city-input"
+            placeholder="Ville"
+            aria-label="Ville"
+            role="combobox"
+            aria-expanded="false"
+            aria-controls="suggestions"
+            aria-autocomplete="list"
+            autocomplete="off"
+          />
+          <ul
+            id="suggestions"
+            role="listbox"
+            aria-label="Villes proposées"
+            hidden
+          ></ul>
+        </div>
+        <button
+          id="theme-toggle"
+          class="theme-toggle"
+          type="button"
+          aria-label="Activer le thème nuit"
+          aria-pressed="false"
+        >
+          <span class="theme-icon theme-icon--moon" aria-hidden="true"></span>
+        </button>
+      </div>
+    </header>
+
+    <main id="app" class="app-main"></main>
+
+    <script type="module" src="js/main.js"></script>
+  </body>
+</html>
