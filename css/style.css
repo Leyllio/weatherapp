@@ -230,12 +230,15 @@ button:hover {
   padding-bottom: 0.25rem;
   min-inline-size: 0;
   border-bottom: 3px solid var(--accent);
+
+  /* Drives the wordmark and its umbrella together, so they never drift apart. */
+  --title-size: clamp(1.75rem, 7vh, 3.5rem);
 }
 
 .logo {
   position: relative;
   margin: 0;
-  font-size: clamp(1.75rem, 7vh, 3.5rem);
+  font-size: var(--title-size);
   font-weight: 700;
   line-height: 1;
   letter-spacing: 0.05em;
@@ -243,8 +246,9 @@ button:hover {
 
 .logo-mark {
   position: relative;
-  width: 1.5rem;
-  height: 1.5rem;
+  flex: none;
+  width: var(--title-size);
+  height: var(--title-size);
   transform: rotate(340deg);
   -webkit-mask-image: url("../img/umbrella.svg");
   mask-image: url("../img/umbrella.svg");
@@ -781,8 +785,8 @@ button:hover {
   }
 
   /* Matches the TD1_2_BJ wordmark scale, which is height driven on desktop. */
-  .logo {
-    font-size: clamp(1.1rem, 6vw, 1.5rem);
+  .banner-brand {
+    --title-size: clamp(1.1rem, 6vw, 1.5rem);
   }
 
   /* Wordmark on the first row, search and theme side by side below it. */
