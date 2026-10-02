@@ -64,8 +64,8 @@ function renderSuggestions() {
           role: "option",
           "aria-selected": String(index === highlighted),
           onclick: () => selectCity(city),
-          onpointerenter: () => prefetchWeather(city.url, city.name),
-          onfocus: () => prefetchWeather(city.url, city.name),
+          onpointerenter: () => prefetchWeather(city.url, city.name, city.countryCode),
+          onfocus: () => prefetchWeather(city.url, city.name, city.countryCode),
         },
         el("span", {}, city.name),
         city.npa ? el("span", { class: "npa muted" }, city.npa) : null,
@@ -84,7 +84,7 @@ function highlight(delta) {
   highlighted = (highlighted + delta + results.length) % results.length;
   renderSuggestions();
   suggestions.children[highlighted]?.scrollIntoView({ block: "nearest" });
-  prefetchWeather(results[highlighted].url, results[highlighted].name);
+  prefetchWeather(results[highlighted].url, results[highlighted].name, results[highlighted].countryCode);
 }
 
 /** Applies a city: fills the input, closes the listbox, then loads weather. */
@@ -120,7 +120,7 @@ async function show(city) {
   else setLoading(true);
 
   try {
-    const data = await fetchWeather(city.url, city.name);
+    const data = await fetchWeather(city.url, city.name, city.countryCode);
     if (run !== generation) return;
 
     localStorage.setItem(LAST_CITY_KEY, JSON.stringify({ url: city.url, name: city.name }));

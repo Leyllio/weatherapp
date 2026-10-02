@@ -18,6 +18,9 @@
 
 import { toSlug } from "./text.js";
 
+/** Candidates asked for per query, so the right country can be picked out. */
+const GEOCODE_CANDIDATES = 10;
+
 const GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search";
 const FORECAST_URL = "https://api.open-meteo.com/v1/forecast";
 
@@ -160,14 +163,26 @@ function nameVariants(name) {
  * worth another spelling. Transport failures and throttling are rethrown as they
  * are: retrying them would report a network outage as a missing city and would
  * multiply the request count exactly when the API is asking us to slow down.
+ *
+ * Several results are asked for and the ones from the wrong country are dropped,
+ * because stripping the postal suffix of `Avon (77)` yields a `Avon` that only
+ * exists in Ohio. Without the filter the city silently gets another continent's
+ * weather instead of an honest failure.
  */
-async function geocode(name, signal) {
+async function geocode(name, signal, countryCode) {
   for (const query of nameVariants(name)) {
-    const url = `${GEOCODE_URL}?name=${encodeURIComponent(query)}&count=1&language=fr&format=json`;
-    const data = await getJson(url, signal);
-    const place = data.results?.[0];
+    const params = new URLSearchParams({
+      name: query,
+      count: String(GEOCODE_CANDIDATES),
+      language: "fr",
+      format: "json",
+    });
+    const data = await getJson(`${GEOCODE_URL}?${params}`, signal);
+    const found = (data.results ?? []).find(
+      (place) => !countryCode || place.country_code === countryCode,
+    );
 
-    if (place) return { latitude: place.latitude, longitude: place.longitude, elevation: place.elevation };
+    if (found) return { latitude: found.latitude, longitude: found.longitude, elevation: found.elevation };
   }
 
   throw new Error(`Ville introuvable : ${name}`);
@@ -202,12 +217,14 @@ function remember(citySlug, data) {
  *
  * `citySlug` is the index slug and doubles as the cache key; `cityName` is the
  * display name, which geocodes more reliably than a slug and is what the view
- * shows. Resolves from cache when the entry is still fresh, and concurrent
- * calls for the same city share a single pair of requests.
+ * shows. `countryCode` is the raw ISO code from the index, used to discard
+ * lookups that landed in another country. Resolves from cache when the entry is
+ * still fresh, and concurrent calls for the same city share a single pair of
+ * requests.
  *
  * @throws {Error} When the lookup or the forecast fails.
  */
-export function fetchWeather(citySlug, cityName = citySlug) {
+export function fetchWeather(citySlug, cityName = citySlug, countryCode) {
   const cached = getCachedWeather(citySlug);
   if (cached) return Promise.resolve(cached);
 
@@ -220,7 +237,7 @@ export function fetchWeather(citySlug, cityName = citySlug) {
   controllers.set(citySlug, controller);
 
   const request = (async () => {
-    const place = await geocode(cityName, signal);
+    const place = await geocode(cityName, signal, countryCode);
     const params = new URLSearchParams({
       latitude: place.latitude,
       longitude: place.longitude,

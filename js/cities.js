@@ -10,14 +10,22 @@ import { toSlug, capitalize } from "./text.js";
 
 const FILE_URL = new URL("../data/cities.txt", import.meta.url);
 
+/**
+ * The countries the index holds, keyed by its ISO 3166-1 alpha-3 code.
+ *
+ * The geocoder answers with alpha-2, so the code is kept alongside the label and
+ * travels with the row: it is what tells a French `Avon` apart from an American
+ * one. A country missing from this table leaves `countryCode` undefined, which
+ * turns the country filter off rather than rejecting every lookup.
+ */
 const COUNTRIES = {
-  CHE: "Suisse",
-  FRA: "France",
-  BEL: "Belgique",
-  ITA: "Italie",
-  ESP: "Espagne",
-  DEU: "Allemagne",
-  MCO: "Monaco",
+  CHE: { label: "Suisse", code: "CH" },
+  FRA: { label: "France", code: "FR" },
+  BEL: { label: "Belgique", code: "BE" },
+  ITA: { label: "Italie", code: "IT" },
+  ESP: { label: "Espagne", code: "ES" },
+  DEU: { label: "Allemagne", code: "DE" },
+  MCO: { label: "Monaco", code: "MC" },
 };
 
 /** Ranking tiers, lowest first: exact name, postal code, prefix, substring. */
@@ -38,7 +46,15 @@ function loadRows() {
         .filter(Boolean)
         .map((line) => {
           const [key, name, country, npa, url] = line.split("\t");
-          return { key, name: capitalize(name), country: COUNTRIES[country] ?? country, npa, url };
+          const known = COUNTRIES[country];
+          return {
+            key,
+            name: capitalize(name),
+            country: known?.label ?? country,
+            countryCode: known?.code,
+            npa,
+            url,
+          };
         }),
     );
 
