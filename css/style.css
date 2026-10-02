@@ -218,7 +218,6 @@ button:hover {
   min-block-size: clamp(5rem, 12vh, 7rem);
   padding: clamp(0.75rem, 2vh, 1.25rem) 1.5rem;
   min-inline-size: 0;
-  overflow-x: hidden;
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
 }
