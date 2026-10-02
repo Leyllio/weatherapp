@@ -7,9 +7,10 @@ Search any of the 45,174 indexed cities, then read current conditions, a five-da
 ## Features
 
 - **City search** over a local index, with diacritic-insensitive matching and keyboard navigation (`ArrowUp`, `ArrowDown`, `Enter`, `Escape`).
-- **Current conditions**: temperature, condition, wind, humidity, pressure, precipitation, cloud cover, sunrise and sunset, coordinates and elevation.
+- **Current conditions**: temperature, apparent temperature, condition, wind, humidity, pressure, sunrise and sunset, coordinates and elevation.
 - **Five-day overview** spread evenly across the full width, no horizontal scrolling.
-- **Hourly strip** for the current day, reflowing between a minimum and maximum cell size instead of scrolling.
+- **Hourly strip** for the next 24 hours: reflowing cells on desktop, a vertical scrollable list on a phone.
+- **Local weather pictograms**, drawn as CSS masks so the theme colours them and nothing is fetched from a CDN.
 - **Light and dark themes**, following the OS preference on first visit and persisted afterwards.
 - **Rain animation** on the wordmark, on hover only, and disabled under `prefers-reduced-motion`.
 
@@ -25,9 +26,11 @@ Then open <http://localhost:8000>.
 
 ## Data
 
-Weather data comes from the [prevision-meteo.ch](https://www.prevision-meteo.ch) JSON service, under the terms of their [data retrieval documentation](https://www.prevision-meteo.ch/uploads/pdf/recuperation-donneo-meteo.pdf). Please keep the attribution link when reusing this project.
+Weather data comes from [Open-Meteo](https://open-meteo.com), under the terms of their [licence](https://open-meteo.com/en/terms): free for non-commercial use, no API key, and CORS enabled. Please keep the attribution link when reusing this project.
 
-`data/cities.txt` is a tab-separated index of 45,174 cities, generated once from the upstream `list-cities` endpoint and committed so a fresh clone runs without extra setup. Its CORS headers are unreliable, which is why the file is fetched locally rather than proxied through the browser.
+Two requests are made per city: a geocoding lookup for its coordinates, then a forecast for those coordinates. Both answer in a few hundred milliseconds.
+
+`data/cities.txt` is a tab-separated index of 45,174 cities used to power the search suggestions offline. It was generated once from an upstream city list and committed so a fresh clone runs without extra setup; the coordinates shown in the current conditions card are re-resolved through Open-Meteo geocoding.
 
 ## Layout
 
@@ -38,7 +41,7 @@ Weather data comes from the [prevision-meteo.ch](https://www.prevision-meteo.ch)
 | `js/text.js` | Diacritic stripping and slug generation |
 | `js/dom.js` | `el()` element builder, icon and pictogram helpers |
 | `js/cities.js` | City index loading, ranking and lookup |
-| `js/weather.js` | API access, response cache, payload shaping |
+| `js/weather.js` | Geocoding and forecast access, cache, WMO code mapping, payload shaping |
 | `js/render.js` | View functions, one per section |
 | `js/theme.js` | Theme resolution and persistence |
 | `js/rain.js` | Rain particle generation for the wordmark |
@@ -46,4 +49,4 @@ Weather data comes from the [prevision-meteo.ch](https://www.prevision-meteo.ch)
 
 ## Notes on performance
 
-The upstream API answers in roughly 15 to 30 seconds and sends `cache-control: no-store`, so there is no HTTP layer to cache. Latency is therefore managed in `js/weather.js` with an in-memory cache mirrored into `sessionStorage`, request de-duplication, prefetching on suggestion hover, cancellation of abandoned requests, and a two-phase paint that shows cached data immediately.
+Latency is managed in `js/weather.js` with an in-memory cache mirrored into `sessionStorage`, request de-duplication, prefetching on suggestion hover, cancellation of abandoned requests, and a two-phase paint that shows cached data immediately. A 15 second ceiling on each request keeps a dead connection from leaving the interface waiting.

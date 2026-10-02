@@ -1,40 +1,92 @@
 /**
- * Access to the prevision-meteo.ch JSON service.
+ * Weather data from Open-Meteo, normalised into one predictable shape.
  *
- * Every response follows the same shape: `city_info`, `current_condition`,
- * then `fcst_day_0` ... `fcst_day_4`. Each day carries a `hourly_data` map
- * keyed by `0H00`, `1H00`, ... `23H00`.
+ * Two calls per city: a geocoding lookup for its coordinates, then a forecast
+ * for those coordinates. Both are keyless, CORS enabled and answer in a few
+ * hundred milliseconds, so the module keeps a small cache plus prefetch and
+ * cancellation for repeat visits but no longer has to work around a slow
+ * upstream.
  *
- * The upstream service answers in roughly 20 seconds for a 52 KB payload and
- * sends `cache-control: no-store`, so there is no HTTP layer to lean on. All
- * perceived speed therefore comes from this module:
+ * The normalised payload, which `render.js` consumes and nothing else should:
  *
- * - an in-memory cache with a freshness window, mirrored into sessionStorage so
- *   a page reload does not refetch either;
- * - request de-duplication, so repeated calls for one city share a single call;
- * - `prefetchWeather`, which starts a request before the user commits;
- * - `cancelWeather`, which aborts a request nobody is waiting for any more.
+ *   { name, country, latitude, longitude, elevation, sunrise, sunset,
+ *     current: { time, temp, feels, humidity, pressure, wind, windDir,
+ *                condition, icon },
+ *     days:  [ { date, label, tmin, tmax, condition, icon } x5 ],
+ *     hours: [ { hour, temp, wind, windDir, humidity, condition, icon } x24 ] }
  */
 
-const API_URL = "https://www.prevision-meteo.ch/services/json/";
-const DAY_COUNT = 5;
+const GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search";
+const FORECAST_URL = "https://api.open-meteo.com/v1/forecast";
 
-/** The API only refreshes its observation hourly, so this is generous. */
+const CURRENT_FIELDS = [
+  "temperature_2m",
+  "apparent_temperature",
+  "relative_humidity_2m",
+  "surface_pressure",
+  "wind_speed_10m",
+  "wind_direction_10m",
+  "weather_code",
+  "is_day",
+];
+
+const HOURLY_FIELDS = ["temperature_2m", "wind_speed_10m", "wind_direction_10m", "relative_humidity_2m", "weather_code"];
+const DAILY_FIELDS = ["weather_code", "temperature_2m_max", "temperature_2m_min", "sunrise", "sunset"];
+
+const DAY_COUNT = 5;
+const HOUR_COUNT = 24;
+
+/** Open-Meteo updates roughly every 15 minutes, so this is comfortably long. */
 const TTL = 10 * 60 * 1000;
 
 /** Upper bound on cached cities, evicted least-recently-used first. */
 const MAX_ENTRIES = 12;
 
-/**
- * Ceiling for a single request.
- *
- * Measured latencies on the upstream service range from 15 s to 30 s, so this
- * sits comfortably above the worst observed response and only trips on a
- * genuinely dead connection.
- */
-const TIMEOUT = 45_000;
+/** A dead connection should fail fast enough to still show an error card. */
+const TIMEOUT = 15_000;
 
 const STORAGE_KEY = "weather-cache";
+
+/**
+ * WMO weather code to French label and icon name.
+ *
+ * Day and night share a row except for the clear and mostly-clear codes, which
+ * fall back to their moon variant through `describe`.
+ */
+const WMO = {
+  0: ["Ensoleille", "sun"],
+  1: ["Plutot degage", "cloud-sun"],
+  2: ["Partiellement nuageux", "cloud-sun"],
+  3: ["Couvert", "cloud"],
+  45: ["Brouillard", "fog"],
+  48: ["Brouillard givrant", "fog"],
+  51: ["Bruine legere", "rain"],
+  53: ["Bruine", "rain"],
+  55: ["Bruine dense", "rain"],
+  56: ["Bruine verglaçante", "rain"],
+  57: ["Bruine verglaçante", "rain"],
+  61: ["Pluie legere", "rain"],
+  63: ["Pluie", "rain"],
+  65: ["Pluie forte", "rain"],
+  66: ["Pluie verglaçante", "rain"],
+  67: ["Pluie verglaçante", "rain"],
+  71: ["Neige legere", "snow"],
+  73: ["Neige", "snow"],
+  75: ["Neige forte", "snow"],
+  77: ["Grains de neige", "snow"],
+  80: ["Averses", "rain"],
+  81: ["Averses", "rain"],
+  82: ["Averses violentes", "rain"],
+  85: ["Averses de neige", "snow"],
+  86: ["Averses de neige", "snow"],
+  95: ["Orage", "thunder"],
+  96: ["Orage et grele", "thunder"],
+  99: ["Orage et grele", "thunder"],
+};
+
+const NIGHT_ICON = { sun: "moon", "cloud-sun": "cloud-moon" };
+
+const DAY_LABELS = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
 
 /** slug -> `{ data, expires }` */
 const cache = new Map();
@@ -86,6 +138,17 @@ async function getJson(url, signal) {
   return response.json();
 }
 
+/** Looks up the coordinates of a city, by name or by the index slug. */
+async function geocode(query, signal) {
+  const url = `${GEOCODE_URL}?name=${encodeURIComponent(query)}&count=1&language=fr&format=json`;
+  const data = await getJson(url, signal);
+  const place = data.results?.[0];
+
+  if (!place) throw new Error(`Ville introuvable : ${query}`);
+
+  return { latitude: place.latitude, longitude: place.longitude, elevation: place.elevation };
+}
+
 /* ------------------------------------------------------------------- cache */
 
 /** Returns a fresh payload from cache, or `null`. */
@@ -111,14 +174,16 @@ function remember(citySlug, data) {
 }
 
 /**
- * Fetches the full forecast for a city slug such as `seyssinet-pariset`.
+ * Fetches the full forecast for a city.
  *
- * Resolves from cache when the entry is still fresh. Concurrent calls for the
- * same city share a single network request.
+ * `citySlug` is the index slug and doubles as the cache key; `cityName` is the
+ * display name, which geocodes more reliably than a slug and is what the view
+ * shows. Resolves from cache when the entry is still fresh, and concurrent
+ * calls for the same city share a single pair of requests.
  *
- * @throws {Error} When the API answers with a transport or payload error.
+ * @throws {Error} When the lookup or the forecast fails.
  */
-export function fetchWeather(citySlug) {
+export function fetchWeather(citySlug, cityName = citySlug) {
   const cached = getCachedWeather(citySlug);
   if (cached) return Promise.resolve(cached);
 
@@ -127,19 +192,30 @@ export function fetchWeather(citySlug) {
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT);
+  const { signal } = controller;
   controllers.set(citySlug, controller);
 
-  const request = getJson(API_URL + encodeURIComponent(citySlug), controller.signal)
-    .then((data) => {
-      if (data.errors) throw new Error(data.errors[0]?.text ?? "Ville inconnue");
-      remember(citySlug, data);
-      return data;
-    })
-    .finally(() => {
-      clearTimeout(timeout);
-      inFlight.delete(citySlug);
-      controllers.delete(citySlug);
+  const request = (async () => {
+    const place = await geocode(cityName, signal);
+    const params = new URLSearchParams({
+      latitude: place.latitude,
+      longitude: place.longitude,
+      current: CURRENT_FIELDS.join(","),
+      hourly: HOURLY_FIELDS.join(","),
+      daily: DAILY_FIELDS.join(","),
+      timezone: "auto",
+      forecast_days: DAY_COUNT,
     });
+
+    const raw = await getJson(`${FORECAST_URL}?${params}`, signal);
+    const data = normalise(raw, cityName, place.elevation);
+    remember(citySlug, data);
+    return data;
+  })().finally(() => {
+    clearTimeout(timeout);
+    inFlight.delete(citySlug);
+    controllers.delete(citySlug);
+  });
 
   inFlight.set(citySlug, request);
   return request;
@@ -152,17 +228,16 @@ export function fetchWeather(citySlug) {
  * flight by the time they click. Failures are swallowed on purpose: the real
  * call will surface them.
  */
-export function prefetchWeather(citySlug) {
+export function prefetchWeather(citySlug, cityName) {
   if (cache.has(citySlug) || inFlight.has(citySlug)) return;
-  fetchWeather(citySlug).catch(() => {});
+  fetchWeather(citySlug, cityName).catch(() => {});
 }
 
 /**
  * Aborts the request for a city, if any.
  *
- * Called when the selection moves on, so an abandoned 20 second request stops
- * consuming a connection instead of holding the UI hostage. The rejection it
- * produces belongs to whoever awaited `fetchWeather`.
+ * Called when the selection moves on, so an abandoned request stops consuming a
+ * connection. The rejection it produces belongs to whoever awaited `fetchWeather`.
  */
 export function cancelWeather(citySlug) {
   controllers.get(citySlug)?.abort();
@@ -170,26 +245,101 @@ export function cancelWeather(citySlug) {
 
 /* ------------------------------------------------------------------- shape */
 
-/** Returns the five daily forecasts, skipping any missing day. */
-export function getDays(data) {
-  return Array.from({ length: DAY_COUNT }, (_, index) => data[`fcst_day_${index}`]).filter(Boolean);
+/** Turns a WMO code into a French label and a day or night icon name. */
+function describe(code, isDay) {
+  const [label, icon] = WMO[code] ?? ["Inconnu", "cloud"];
+  const resolved = isDay ? icon : (NIGHT_ICON[icon] ?? icon);
+  return { condition: label, icon: resolved };
 }
 
-/** Flattens a day's `hourly_data` into an array sorted by hour. */
-export function getHourly(day) {
-  if (!day?.hourly_data) return [];
-  return Object.entries(day.hourly_data)
-    .map(([key, value]) => ({ hour: Number.parseInt(key, 10), ...value }))
-    .sort((a, b) => a.hour - b.hour);
+/** Rounds a coordinate or a measurement for display. */
+function round(value, digits = 0) {
+  return value === null || value === undefined ? null : Number(value.toFixed(digits));
+}
+
+/** `2026-10-02T07:35` becomes `07:35`. */
+function clockOf(iso) {
+  return typeof iso === "string" ? iso.slice(11, 16) : "-";
+}
+
+/** `2026-10-02` becomes a French weekday label. */
+function labelOf(dateIso) {
+  const weekday = new Date(`${dateIso}T00:00:00`).getDay();
+  return DAY_LABELS[weekday] ?? "";
+}
+
+/** Reads a value from one of Open-Meteo's parallel hourly arrays. */
+function at(arrays, index, field) {
+  return arrays[field]?.[index] ?? null;
 }
 
 /**
- * Picks the hourly entry matching the API's reported observation time, so the
- * current card can show measured values rather than daily averages.
+ * Converts a raw Open-Meteo payload into the normalised shape.
+ *
+ * Exported for tests, which feed it a recorded fixture instead of the network.
  */
-export function currentHourly(data) {
-  const hourly = getHourly(data.fcst_day_0 ?? data.fcst_day_1);
-  const observed = Number.parseInt(data.current_condition?.hour ?? "", 10);
-  const fallback = Number.isNaN(observed) ? new Date().getHours() : observed;
-  return hourly.find((entry) => entry.hour === fallback) ?? hourly[0];
+export function normalise(raw, cityName, elevation) {
+  const current = raw.current ?? {};
+  const daily = raw.daily ?? {};
+  const hourly = raw.hourly ?? {};
+
+  const currentCode = current.weather_code;
+  const currentIsDay = (current.is_day ?? 1) === 1;
+
+  const days = Array.from({ length: DAY_COUNT }, (_, index) => ({
+    date: daily.time?.[index] ?? "",
+    label: labelOf(daily.time?.[index] ?? ""),
+    tmin: round(daily.temperature_2m_min?.[index]),
+    tmax: round(daily.temperature_2m_max?.[index]),
+    ...describe(daily.weather_code?.[index], true),
+  }));
+
+  // The hourly series starts at local midnight, so the current hour is the first
+  // entry at or after the observation time.
+  const start = Math.max(
+    0,
+    (hourly.time ?? []).findIndex((iso) => iso >= (current.time ?? "")),
+  );
+
+  const hours = Array.from({ length: HOUR_COUNT }, (_, offset) => {
+    const index = start + offset;
+    const iso = hourly.time?.[index];
+    return {
+      hour: iso ? new Date(iso).getHours() : 0,
+      temp: round(at(hourly, index, "temperature_2m")),
+      wind: round(at(hourly, index, "wind_speed_10m")),
+      windDir: compass(at(hourly, index, "wind_direction_10m")),
+      humidity: round(at(hourly, index, "relative_humidity_2m")),
+      ...describe(at(hourly, index, "weather_code"), currentIsDay),
+    };
+  });
+
+  return {
+    name: cityName,
+    country: "",
+    latitude: round(raw.latitude, 4),
+    longitude: round(raw.longitude, 4),
+    elevation: round(elevation),
+    sunrise: clockOf(daily.sunrise?.[0]),
+    sunset: clockOf(daily.sunset?.[0]),
+    current: {
+      time: current.time ?? "",
+      temp: round(current.temperature_2m),
+      feels: round(current.apparent_temperature),
+      humidity: round(current.relative_humidity_2m),
+      pressure: round(current.surface_pressure),
+      wind: round(current.wind_speed_10m),
+      windDir: compass(current.wind_direction_10m),
+      ...describe(currentCode, currentIsDay),
+    },
+    days,
+    hours,
+  };
+}
+
+/** Compass point for a bearing in degrees, or `-` when unknown. */
+function compass(degrees) {
+  if (degrees === null || degrees === undefined) return "-";
+  const points = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
+  return points[Math.round(((degrees % 360) / 45)) % 8];
 }

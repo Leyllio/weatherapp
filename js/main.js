@@ -2,10 +2,9 @@
  * Application controller: wires the city combobox to the weather views and
  * remembers the last selected city between visits.
  *
- * Because the upstream API is slow and occasionally rate limited, the view is
- * painted twice per selection: once immediately from cache when possible, then
- * again with the network result. A generation counter makes sure a slow or
- * aborted request can never overwrite a newer selection.
+ * The view is painted twice per selection: once immediately from cache when
+ * possible, then again with the network result. A generation counter makes sure
+ * a slow or aborted request can never overwrite a newer selection.
  */
 
 import { el } from "./dom.js";
@@ -64,8 +63,8 @@ function renderSuggestions() {
           role: "option",
           "aria-selected": String(index === highlighted),
           onclick: () => selectCity(city),
-          onpointerenter: () => prefetchWeather(city.url),
-          onfocus: () => prefetchWeather(city.url),
+          onpointerenter: () => prefetchWeather(city.url, city.name),
+          onfocus: () => prefetchWeather(city.url, city.name),
         },
         el("span", {}, city.name),
         city.npa ? el("span", { class: "npa muted" }, city.npa) : null,
@@ -84,7 +83,7 @@ function highlight(delta) {
   highlighted = (highlighted + delta + results.length) % results.length;
   renderSuggestions();
   suggestions.children[highlighted]?.scrollIntoView({ block: "nearest" });
-  prefetchWeather(results[highlighted].url);
+  prefetchWeather(results[highlighted].url, results[highlighted].name);
 }
 
 /** Applies a city: fills the input, closes the listbox, then loads weather. */
@@ -107,7 +106,7 @@ async function runSearch(query) {
  * Loads a city.
  *
  * Paints from cache straight away when the entry is still fresh, so revisiting
- * a city is instant instead of costing another 20 second round trip.
+ * a city is instant instead of costing another round trip.
  */
 async function show(city) {
   if (shownSlug !== null && shownSlug !== city.url) cancelWeather(shownSlug);
@@ -120,7 +119,7 @@ async function show(city) {
   else setLoading(true);
 
   try {
-    const data = await fetchWeather(city.url);
+    const data = await fetchWeather(city.url, city.name);
     if (run !== generation) return;
 
     localStorage.setItem(LAST_CITY_KEY, city.url);

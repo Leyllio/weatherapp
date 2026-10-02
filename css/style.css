@@ -146,6 +146,66 @@ button:hover {
   mask-image: url("../img/globe-simple.svg");
 }
 
+/* Weather pictograms, keyed by the WMO mapping in js/weather.js. */
+.icon-sun,
+.icon-moon,
+.icon-cloud-sun,
+.icon-cloud-moon,
+.icon-cloud,
+.icon-fog,
+.icon-rain,
+.icon-snow,
+.icon-thunder {
+  width: 2rem;
+  height: 2rem;
+  flex: none;
+}
+
+.icon-sun {
+  -webkit-mask-image: url("../img/weather/sun.svg");
+  mask-image: url("../img/weather/sun.svg");
+}
+
+.icon-moon {
+  -webkit-mask-image: url("../img/weather/moon.svg");
+  mask-image: url("../img/weather/moon.svg");
+}
+
+.icon-cloud {
+  -webkit-mask-image: url("../img/weather/cloud.svg");
+  mask-image: url("../img/weather/cloud.svg");
+}
+
+.icon-cloud-sun {
+  -webkit-mask-image: url("../img/weather/cloud-sun.svg");
+  mask-image: url("../img/weather/cloud-sun.svg");
+}
+
+.icon-cloud-moon {
+  -webkit-mask-image: url("../img/weather/cloud-moon.svg");
+  mask-image: url("../img/weather/cloud-moon.svg");
+}
+
+.icon-fog {
+  -webkit-mask-image: url("../img/weather/fog.svg");
+  mask-image: url("../img/weather/fog.svg");
+}
+
+.icon-rain {
+  -webkit-mask-image: url("../img/weather/rain.svg");
+  mask-image: url("../img/weather/rain.svg");
+}
+
+.icon-snow {
+  -webkit-mask-image: url("../img/weather/snow.svg");
+  mask-image: url("../img/weather/snow.svg");
+}
+
+.icon-thunder {
+  -webkit-mask-image: url("../img/weather/thunder.svg");
+  mask-image: url("../img/weather/thunder.svg");
+}
+
 /* =============================================================================
    4. Banner
    ========================================================================== */
@@ -155,7 +215,10 @@ button:hover {
   display: flex;
   align-items: center;
   gap: 2rem;
-  padding: 0.75rem 2rem;
+  min-block-size: clamp(5rem, 12vh, 7rem);
+  padding: clamp(0.75rem, 2vh, 1.25rem) 1.5rem;
+  min-inline-size: 0;
+  overflow-x: hidden;
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
 }
@@ -166,14 +229,16 @@ button:hover {
   align-items: center;
   gap: 0.25rem;
   padding-bottom: 0.25rem;
+  min-inline-size: 0;
   border-bottom: 3px solid var(--accent);
 }
 
 .logo {
   position: relative;
   margin: 0;
-  font-size: clamp(1.25rem, 1rem + 1.2vw, 1.777rem);
+  font-size: clamp(1.75rem, 7vh, 3.5rem);
   font-weight: 700;
+  line-height: 1;
   letter-spacing: 0.05em;
 }
 
@@ -275,7 +340,9 @@ button:hover {
   position: relative;
   display: flex;
   align-items: center;
+  flex: 0 1 var(--menu-width);
   width: var(--menu-width);
+  min-width: 0;
 }
 
 #menu input {
@@ -696,7 +763,7 @@ button:hover {
     text-align: left;
   }
 
-  .hours-cell > img {
+  .hours-cell > .icon {
     justify-self: center;
   }
 
@@ -710,7 +777,13 @@ button:hover {
   .app-banner {
     flex-wrap: wrap;
     gap: 0.75rem;
+    min-block-size: 4.5rem;
     padding: 0.75rem 1rem;
+  }
+
+  /* Matches the TD1_2_BJ wordmark scale, which is height driven on desktop. */
+  .logo {
+    font-size: clamp(1.1rem, 6vw, 1.5rem);
   }
 
   /* Wordmark on the first row, search and theme side by side below it. */

@@ -3,16 +3,18 @@
  *
  * Sections are grouped as current conditions, five-day overview, hourly strip,
  * and the two status cards (empty state and error).
+ *
+ * All of them read the normalised payload produced by `weather.js`; no upstream
+ * field name appears here.
  */
 
 import { el, icon, weatherIcon } from "./dom.js";
-import { getDays, getHourly, currentHourly } from "./weather.js";
 
 /* ------------------------------------------------------------------ stats */
 
 /** Formats a value with its unit, falling back to a dash when missing. */
 function format(value, unit) {
-  if (value === null || value === undefined || value === "") return "-";
+  if (value === null || value === undefined) return "-";
   return `${value}${unit ? ` ${unit}` : ""}`;
 }
 
@@ -39,9 +41,8 @@ function statGroup(label, iconName, stats) {
 /* ------------------------------------------------------------ conditions */
 
 /** Live conditions: location, temperature, and the two statistics blocks. */
-export function currentCard(data, hourly) {
-  const current = data.current_condition ?? {};
-  const city = data.city_info ?? {};
+export function currentCard(data) {
+  const current = data.current;
 
   return el(
     "section",
@@ -49,8 +50,8 @@ export function currentCard(data, hourly) {
     el(
       "div",
       { class: "current-place" },
-      el("h2", {}, city.name ?? "-"),
-      el("p", { class: "muted" }, `${city.country ?? ""} - ${current.date ?? ""} ${current.hour ?? ""}`),
+      el("h2", {}, data.name),
+      el("p", { class: "muted" }, current.time.replace("T", " ")),
     ),
     el(
       "div",
@@ -59,28 +60,26 @@ export function currentCard(data, hourly) {
       el(
         "div",
         {},
-        el("p", { class: "current-temp" }, icon("temp"), `${current.tmp ?? "-"}°`),
-        el("p", { class: "muted" }, current.condition ?? ""),
+        el("p", { class: "current-temp" }, icon("temp"), `${current.temp}°`),
+        el("p", { class: "muted" }, `${current.condition} - ressentie ${current.feels}°`),
       ),
     ),
     el(
       "dl",
       { class: "stats" },
-      stat("Vent", hourly?.WNDSPD10m ?? current.wnd_spd, "km/h"),
-      stat("Direction", hourly?.WNDDIRCARD10 ?? current.wnd_dir),
-      stat("Humidite", hourly?.RH2m ?? current.humidity, "%", "humidity"),
-      stat("Pression", hourly?.PRMSL ?? current.pressure, "hPa"),
-      stat("Precipitations", hourly?.APCPsfc, "mm"),
-      stat("Nuages", hourly?.LCDC, "%"),
+      stat("Vent", current.wind, "km/h"),
+      stat("Direction", current.windDir),
+      stat("Humidite", current.humidity, "%", "humidity"),
+      stat("Pression", current.pressure, "hPa"),
     ),
     el(
       "dl",
       { class: "stats" },
-      statGroup("Soleil", "sun-horizon", [stat("Lever", city.sunrise), stat("Coucher", city.sunset)]),
+      statGroup("Soleil", "sun-horizon", [stat("Lever", data.sunrise), stat("Coucher", data.sunset)]),
       statGroup("Coordonnees", "globe", [
-        stat("Latitude", Number(city.latitude).toFixed(2)),
-        stat("Longitude", Number(city.longitude).toFixed(2)),
-        stat("Altitude", city.elevation, "m"),
+        stat("Latitude", data.latitude),
+        stat("Longitude", data.longitude),
+        stat("Altitude", data.elevation, "m"),
       ]),
     ),
   );
@@ -97,18 +96,18 @@ export function forecastBoard(data) {
     el(
       "ul",
       { class: "week" },
-      getDays(data).map((day, index) =>
+      data.days.map((day, index) =>
         el(
           "li",
           { class: index === 0 ? "week-day is-today" : "week-day" },
           el(
             "header",
             { class: "week-head" },
-            el("h3", {}, day.day_long ?? day.day_short ?? ""),
-            el("p", { class: "muted" }, day.date ?? ""),
+            el("h3", {}, day.label),
+            el("p", { class: "muted" }, day.date),
             weatherIcon(day.icon, day.condition, "44"),
-            el("p", { class: "week-temps" }, icon("temp"), `${day.tmin ?? "--"} / ${day.tmax ?? "--"}`),
-            el("p", { class: "week-condition muted" }, day.condition ?? ""),
+            el("p", { class: "week-temps" }, icon("temp"), `${day.tmin} / ${day.tmax}`),
+            el("p", { class: "week-condition muted" }, day.condition),
           ),
         ),
       ),
@@ -116,16 +115,15 @@ export function forecastBoard(data) {
   );
 }
 
-/** Today's 24 hourly steps; cells reflow and wrap instead of scrolling. */
+/** The next 24 hourly steps; cells reflow on desktop and scroll on a phone. */
 export function hourlyBoard(data) {
-  const day = data.fcst_day_0 ?? data.fcst_day_1;
-  const hours = getHourly(day);
+  const hours = data.hours;
   if (hours.length === 0) return null;
 
   return el(
     "section",
     { class: "card hours" },
-    el("h2", {}, `Aujourd'hui - ${day.date ?? ""}`),
+    el("h2", {}, `Prochaines 24 heures`),
     el(
       "ul",
       { class: "hours-list" },
@@ -134,19 +132,14 @@ export function hourlyBoard(data) {
           "li",
           { class: "hours-cell" },
           el("span", { class: "hours-time" }, `${String(entry.hour).padStart(2, "0")}h`),
-          weatherIcon(entry.ICON, entry.CONDITION, "28"),
-          el(
-            "span",
-            { class: "hours-detail hours-temp" },
-            icon("temp"),
-            `${Math.round(entry.TMP2m ?? 0)}°`,
-          ),
-          el("span", { class: "hours-detail muted" }, `${entry.WNDDIRCARD10 ?? ""} ${entry.WNDSPD10m ?? 0}`),
+          weatherIcon(entry.icon, entry.condition, "28"),
+          el("span", { class: "hours-detail hours-temp" }, icon("temp"), `${entry.temp}°`),
+          el("span", { class: "hours-detail muted" }, `${entry.windDir} ${entry.wind}`),
           el(
             "span",
             { class: "hours-detail muted" },
             icon("humidity"),
-            `${entry.RH2m ?? 0}%`,
+            `${entry.humidity}%`,
           ),
         ),
       ),
@@ -159,7 +152,7 @@ export function hourlyBoard(data) {
 /** Paints the three weather sections for a payload. */
 export function renderWeather(app, data) {
   const hourly = hourlyBoard(data);
-  app.replaceChildren(currentCard(data, currentHourly(data)), forecastBoard(data));
+  app.replaceChildren(currentCard(data), forecastBoard(data));
   if (hourly) app.append(hourly);
 }
 
@@ -168,7 +161,7 @@ export function setLoading(isLoading) {
   document.getElementById("app").classList.toggle("is-loading", isLoading);
 }
 
-/** Failure card shown when the API or the city lookup rejects. */
+/** Failure card shown when the lookup or the forecast rejects. */
 export function errorCard(message) {
   return el("section", { class: "card error" }, el("p", { class: "muted" }, message));
 }

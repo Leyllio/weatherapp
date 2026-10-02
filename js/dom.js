@@ -44,7 +44,12 @@ export function icon(name) {
   return el("span", { class: `icon icon-${name}`, "aria-hidden": "true" });
 }
 
-/** Renders an external weather pictogram, or nothing when the API omits it. */
-export function weatherIcon(src, alt, size) {
-  return src ? el("img", { src, alt: alt ?? "", width: size, height: size }) : null;
+/** Renders a weather pictogram as a CSS mask, so it inherits the text colour. */
+export function weatherIcon(kind, alt, size) {
+  return el("span", {
+    class: `icon icon-${kind}`,
+    role: "img",
+    "aria-label": alt ?? "",
+    style: { width: `${size}px`, height: `${size}px` },
+  });
 }
