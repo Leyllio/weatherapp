@@ -1,6 +1,6 @@
 /**
- * Application controller: wires the city combobox to the weather views and
- * remembers the last selected city between visits.
+ * Application controller: wires the city combobox and the floating map to the
+ * weather views, and remembers the last selected city between visits.
  *
  * The view is painted twice per selection: once immediately from cache when
  * possible, then again with the network result. A generation counter makes sure
@@ -10,10 +10,13 @@
 import { el } from "./dom.js";
 import { initTheme } from "./theme.js";
 import { createRain } from "./rain.js";
+import { createMapPanel } from "./map.js";
 import { searchCities, findCity, prefetchCities } from "./cities.js";
 import { readLastCity, writeLastCity } from "./storage.js";
 import {
   fetchWeather,
+  fetchWeatherAt,
+  pointKey,
   getCachedWeather,
   prefetchWeather,
   cancelWeather,
@@ -24,6 +27,7 @@ import {
   hourlyBoard,
   renderWeather,
   setLoading,
+  setPlaceName,
   errorCard,
   placeholderCard,
 } from "./render.js";
@@ -31,6 +35,9 @@ import {
 const input = document.getElementById("city-input");
 const app = document.getElementById("app");
 const suggestions = document.getElementById("suggestions");
+
+/** The floating map, created on boot with the point picker it reports to. */
+const map = createMapPanel(showPoint);
 
 let results = [];
 let highlighted = -1;
@@ -102,32 +109,95 @@ async function runSearch(query) {
 /* ----------------------------------------------------------------- render */
 
 /**
- * Loads a city.
+ * Paints a payload, aborting the request it replaces.
  *
- * Paints from cache straight away when the entry is still fresh, so revisiting
- * a city is instant instead of costing another round trip.
+ * A fresh cache entry is painted straight away, so going back to a city already
+ * visited costs no round trip.
+ *
+ * @param {string} key Cache key of the place, used to abort its predecessor.
+ * @param {() => Promise<object>} load The request for this place.
+ * @returns {Promise<{data: object, isCurrent: () => boolean}|undefined>}
+ *   `undefined` when the request was superseded or failed. `isCurrent` lets a
+ *   follow-up step know whether its own result is still worth applying.
  */
-async function show(city) {
-  if (shownSlug !== null && shownSlug !== city.url) cancelWeather(shownSlug);
-  shownSlug = city.url;
+async function paint(key, load) {
+  if (shownSlug !== null && key !== shownSlug) cancelWeather(shownSlug);
+  shownSlug = key;
 
   const run = ++generation;
-  const cached = getCachedWeather(city.url);
+  const isCurrent = () => run === generation;
 
+  const cached = getCachedWeather(key);
   if (cached) renderWeather(app, cached);
   else setLoading(true);
 
   try {
-    const data = await fetchWeather(city.url, city.name, city.countryCode);
-    if (run !== generation) return;
+    const data = await load();
+    if (!isCurrent()) return;
 
-    writeLastCity(city);
     renderWeather(app, data);
+    return { data, isCurrent };
   } catch (error) {
-    if (run !== generation || error.name === "AbortError") return;
+    if (!isCurrent() || error.name === "AbortError") return;
     app.replaceChildren(errorCard(error.message ?? "Impossible de recuperer la meteo."));
   } finally {
-    if (run === generation) setLoading(false);
+    if (isCurrent()) setLoading(false);
+  }
+}
+
+/**
+ * Loads a city from the search, then follows it on the map.
+ *
+ * @param {object} city A row of the city index.
+ */
+async function show(city) {
+  const painted = await paint(city.url, () => fetchWeather(city.url, city.name, city.countryCode));
+  if (!painted) return;
+
+  writeLastCity(city);
+  map.locate(painted.data);
+}
+
+/**
+ * Loads the weather of a point picked on the map, and then names it.
+ *
+ * The forecast answers for any pair of coordinates, so nothing has to be looked
+ * up first and the weather shows as soon as it arrives. Naming the point is a
+ * second, independent request: it only replaces the place name, and the
+ * coordinates stand in when it fails or when the user has already moved on.
+ *
+ * @param {{lat: number, lng: number}} point
+ */
+async function showPoint(point) {
+  const { key } = pointKey(point.lat, point.lng);
+  const painted = await paint(key, () => fetchWeatherAt(point.lat, point.lng));
+  if (!painted) return;
+
+  input.value = painted.data.name;
+  map.shrink(point);
+
+  const name = await nameOf(point);
+  if (name === null || !painted.isCurrent()) return;
+
+  input.value = name;
+  setPlaceName(name);
+}
+
+/**
+ * Names a point through reverse geocoding, or returns `null`.
+ *
+ * The forecast carries coordinates only, so the place name comes from here.
+ * Nominatim expects an identifying user agent and throttles anonymous traffic, so
+ * its failure is expected and must not affect the weather.
+ */
+async function nameOf({ lat, lng }) {
+  const params = new URLSearchParams({ format: "jsonv2", zoom: "10", lat: String(lat), lng: String(lng) });
+
+  try {
+    const response = await fetch(`https://nominatim.openstreetmap.org/reverse?${params}`);
+    return response.ok ? (await response.json()).name : null;
+  } catch {
+    return null;
   }
 }
 

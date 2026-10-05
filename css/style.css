@@ -855,7 +855,108 @@ button:hover {
   }
 }
 
+/* =============================================================================
+   9. Floating map
+   ========================================================================== */
+
+/* The corner the panel and its button share, clear of the page content. */
+:root {
+  --map-inset: 1.25rem;
+
+  /* Both panel sizes, kept as tokens so the button can match the small one. */
+  --map-mini: 12rem;
+  --map-full: 88vmin;
+  --map-ease: 260ms;
+}
+
+.map-dock {
+  position: fixed;
+  right: var(--map-inset);
+  bottom: var(--map-inset);
+  z-index: 30;
+}
+
+.map-dock-toggle,
+.map-dock-expand {
+  background: var(--color-surface);
+  box-shadow: 0 0.25rem 0.75rem color-mix(in srgb, var(--text) 25%, transparent);
+}
+
+.map-dock-toggle {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  padding: 0;
+  border-radius: 50%;
+}
+
+/* Out of the flow and above the panel while it is open, so the button stays
+   reachable and never covers the map it opened. */
+.map-dock-toggle[aria-expanded="true"] {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.5rem);
+}
+
+.map-dock-glyph {
+  width: 1.5rem;
+  height: 1.5rem;
+  -webkit-mask: url("../img/globe-simple.svg") center / contain no-repeat;
+  mask: url("../img/globe-simple.svg") center / contain no-repeat;
+  background-color: currentColor;
+}
+
+.map-dock-panel {
+  position: relative;
+  width: var(--map-mini);
+  height: var(--map-mini);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: 0 0.5rem 1.5rem color-mix(in srgb, var(--text) 25%, transparent);
+  transition:
+    width var(--map-ease) ease,
+    height var(--map-ease) ease;
+}
+
+/* Full viewport minus the inset, so the panel never sits under a screen edge. */
+.map-dock-panel[data-size="full"] {
+  width: min(var(--map-full), calc(100vw - 2 * var(--map-inset)));
+  height: min(var(--map-full), calc(100vh - 2 * var(--map-inset)));
+}
+
+.map-dock-map {
+  width: 100%;
+  height: 100%;
+}
+
+/* Above the map, in the corner that Leaflet leaves for its own zoom control. */
+.map-dock-expand {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 10;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+}
+
+.map-dock-map .leaflet-control-attribution {
+  font-size: 0.625rem;
+}
+
+@media (max-width: 700px) {
+  :root {
+    --map-mini: 10rem;
+    --map-inset: 0.75rem;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .map-dock-panel {
+    transition: none;
+  }
+
   .app-main.is-loading::before {
     animation: none;
     transform: none;

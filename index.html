@@ -6,6 +6,12 @@
     <title>WeatherApp</title>
     <link rel="icon" href="img/favicon.svg" type="image/svg+xml" />
     <meta name="description" content="WeatherApp - meteo par ville et par heure." />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
     <link rel="stylesheet" href="css/style.css" />
   </head>
   <body>
@@ -49,6 +55,37 @@
 
     <main id="app" class="app-main"></main>
 
+    <div class="map-dock">
+      <button
+        id="map-toggle"
+        class="map-dock-toggle"
+        type="button"
+        aria-label="Afficher la carte"
+        aria-controls="map-panel"
+        aria-expanded="false"
+      >
+        <span class="map-dock-glyph" aria-hidden="true"></span>
+      </button>
+
+      <div id="map-panel" class="map-dock-panel" data-size="mini" hidden>
+        <button
+          id="map-expand"
+          class="map-dock-expand"
+          type="button"
+          aria-label="Agrandir la carte"
+        >
+          agrandir
+        </button>
+        <div id="map" class="map-dock-map" role="application" aria-label="Carte"></div>
+      </div>
+    </div>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+      defer
+    ></script>
     <script type="module" src="js/main.js"></script>
   </body>
 </html>

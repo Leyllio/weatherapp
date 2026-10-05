@@ -30,16 +30,14 @@ export function toSlug(text) {
 }
 
 /**
- * Uppercases the first letter and leaves the rest untouched.
+ * Uppercases the first letter of every word, leaving the rest untouched.
  *
- * The city index stores names the way their postal service writes them, so some
- * start lowercase and some start with a leading article apostrophe, as in
- * `'s Gravenvoeren`. Leading punctuation is skipped so the first letter is what
- * gets capitalised, not the apostrophe before it.
+ * A name is free text: `saint-germain-en-laye` is displayed
+ * `Saint-Germain-En-Laye`, and a word may start after a space or a hyphen rather
+ * than at the very beginning, as in `Le Locle` or `'s Gravenvoeren`. Matching the
+ * separating punctuation directly therefore covers both, without the index
+ * arithmetic a first-letter-only version needs.
  */
 export function capitalize(text) {
-  const value = String(text);
-  const index = value.search(/\p{L}/u);
-  if (index < 0) return value;
-  return value.slice(0, index) + value[index].toLocaleUpperCase("fr") + value.slice(index + 1);
+  return String(text).replace(/(^|[\s'-])(\p{L})/gu, (_, before, letter) => before + letter.toLocaleUpperCase("fr"));
 }

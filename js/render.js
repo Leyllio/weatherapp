@@ -9,6 +9,7 @@
  */
 
 import { el, icon, weatherIcon } from "./dom.js";
+import { toAscii } from "./text.js";
 
 /* ------------------------------------------------------------------ stats */
 
@@ -154,6 +155,17 @@ export function renderWeather(app, data) {
   const hourly = hourlyBoard(data);
   app.replaceChildren(currentCard(data), forecastBoard(data));
   if (hourly) app.append(hourly);
+}
+
+/**
+ * Renames the place currently on screen.
+ *
+ * A point picked on the map arrives as coordinates and is only named afterwards,
+ * so the heading is patched in place instead of rendering the whole view twice.
+ */
+export function setPlaceName(name) {
+  const heading = document.querySelector("#app .current-place h2");
+  if (heading) heading.textContent = toAscii(name);
 }
 
 /** Marks the view busy without moving anything on screen. */

@@ -213,6 +213,64 @@ function remember(citySlug, data) {
 }
 
 /**
+ * Downloads the forecast for one point, with the full request set.
+ *
+ * @throws {Error} When the forecast fails.
+ */
+async function forecast({ latitude, longitude }, signal) {
+  const params = new URLSearchParams({
+    latitude,
+    longitude,
+    current: CURRENT_FIELDS.join(","),
+    hourly: HOURLY_FIELDS.join(","),
+    daily: DAILY_FIELDS.join(","),
+    timezone: "auto",
+    forecast_days: DAY_COUNT,
+  });
+
+  return getJson(`${FORECAST_URL}?${params}`, signal);
+}
+
+/**
+ * Resolves a place to its forecast, caching under `key`.
+ *
+ * The whole lifecycle is here once: cache lookup, request de-duplication,
+ * timeout, abort and cache write. `resolve` produces the point to download, so
+ * the same machinery serves a city looked up by name and a point picked on the
+ * map.
+ *
+ * @throws {Error} When the resolution or the forecast fails.
+ */
+function load(key, resolve) {
+  const cached = getCachedWeather(key);
+  if (cached) return Promise.resolve(cached);
+
+  const pending = inFlight.get(key);
+  if (pending) return pending;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT);
+  const { signal } = controller;
+  controllers.set(key, controller);
+
+  const request = Promise.resolve(resolve(signal))
+    .then((place) => forecast(place, signal).then((raw) => ({ raw, place })))
+    .then(({ raw, place }) => {
+      const data = normalise(raw, place.name, place.elevation);
+      remember(key, data);
+      return data;
+    })
+    .finally(() => {
+      clearTimeout(timeout);
+      inFlight.delete(key);
+      controllers.delete(key);
+    });
+
+  inFlight.set(key, request);
+  return request;
+}
+
+/**
  * Fetches the full forecast for a city.
  *
  * `citySlug` is the index slug and doubles as the cache key; `cityName` is the
@@ -225,41 +283,35 @@ function remember(citySlug, data) {
  * @throws {Error} When the lookup or the forecast fails.
  */
 export function fetchWeather(citySlug, cityName = citySlug, countryCode) {
-  const cached = getCachedWeather(citySlug);
-  if (cached) return Promise.resolve(cached);
+  return load(citySlug, (signal) => geocode(cityName, signal, countryCode).then((place) => ({ ...place, name: cityName })));
+}
 
-  const pending = inFlight.get(citySlug);
-  if (pending) return pending;
+/**
+ * Cache key and rounded coordinates for a point picked on the map.
+ *
+ * Nothing is geocoded here, so the coordinates are rounded to a hundredth of a
+ * degree before they become the cache key. That is a bit over a kilometre, fine
+ * enough that two clicks on the same spot share one request and coarse enough
+ * that a stray pixel does not start a new one.
+ *
+ * @returns {{key: string, latitude: number, longitude: number}}
+ */
+export function pointKey(latitude, longitude) {
+  const point = { latitude: round(latitude, 2), longitude: round(longitude, 2) };
+  return { key: `at=${point.latitude},${point.longitude}`, ...point };
+}
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), TIMEOUT);
-  const { signal } = controller;
-  controllers.set(citySlug, controller);
+/**
+ * Fetches the forecast for coordinates picked on the map.
+ *
+ * @throws {Error} When the forecast fails.
+ */
+export function fetchWeatherAt(latitude, longitude) {
+  const point = pointKey(latitude, longitude);
 
-  const request = (async () => {
-    const place = await geocode(cityName, signal, countryCode);
-    const params = new URLSearchParams({
-      latitude: place.latitude,
-      longitude: place.longitude,
-      current: CURRENT_FIELDS.join(","),
-      hourly: HOURLY_FIELDS.join(","),
-      daily: DAILY_FIELDS.join(","),
-      timezone: "auto",
-      forecast_days: DAY_COUNT,
-    });
-
-    const raw = await getJson(`${FORECAST_URL}?${params}`, signal);
-    const data = normalise(raw, cityName, place.elevation);
-    remember(citySlug, data);
-    return data;
-  })().finally(() => {
-    clearTimeout(timeout);
-    inFlight.delete(citySlug);
-    controllers.delete(citySlug);
-  });
-
-  inFlight.set(citySlug, request);
-  return request;
+  // The coordinates already are the place, so there is nothing to resolve. The
+  // payload keeps the coordinates as its name until Nominatim names the point.
+  return load(point.key, () => ({ ...point, name: `${point.latitude}, ${point.longitude}` }));
 }
 
 /**
@@ -327,6 +379,10 @@ export function normalise(raw, cityName, elevation) {
   const currentCode = current.weather_code;
   const currentIsDay = (current.is_day ?? 1) === 1;
 
+  // A geocoded city comes with its own elevation; a point picked on the map only
+  // has the one the forecast grid reports, which is what its own response holds.
+  const altitude = elevation ?? raw.elevation;
+
   const days = Array.from({ length: DAY_COUNT }, (_, index) => ({
     date: daily.time?.[index] ?? "",
     label: labelOf(daily.time?.[index] ?? ""),
@@ -360,7 +416,7 @@ export function normalise(raw, cityName, elevation) {
     country: "",
     latitude: round(raw.latitude, 4),
     longitude: round(raw.longitude, 4),
-    elevation: round(elevation),
+    elevation: round(altitude),
     sunrise: clockOf(daily.sunrise?.[0]),
     sunset: clockOf(daily.sunset?.[0]),
     current: {
