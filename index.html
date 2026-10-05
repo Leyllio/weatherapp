@@ -1,12 +1,15 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="fr" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>WeatherApp</title>
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <title>Application meteo</title>
     <link rel="icon" href="img/favicon.svg" type="image/svg+xml" />
-    <meta name="description" content="WeatherApp - meteo par ville et par heure." />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="css/style.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script type="module" src="js/main.js"></script>
   </head>
   <body>
     <header class="app-banner">
@@ -17,29 +20,14 @@
       </div>
       <div class="banner-tools">
         <div id="menu">
-          <input
-            type="text"
-            id="city-input"
-            placeholder="Ville"
-            aria-label="Ville"
-            role="combobox"
-            aria-expanded="false"
-            aria-controls="suggestions"
-            aria-autocomplete="list"
-            autocomplete="off"
-          />
-          <ul
-            id="suggestions"
-            role="listbox"
-            aria-label="Villes proposées"
-            hidden
-          ></ul>
+          <input type="text" id="city-input" placeholder="Ville" aria-label="Ville" autocomplete="off" />
+          <button type="button" id="show-button">afficher</button>
         </div>
         <button
           id="theme-toggle"
           class="theme-toggle"
           type="button"
-          aria-label="Activer le thème nuit"
+          aria-label="Activer le theme nuit"
           aria-pressed="false"
         >
           <span class="theme-icon theme-icon--moon" aria-hidden="true"></span>
@@ -47,8 +35,13 @@
       </div>
     </header>
 
-    <main id="app" class="app-main"></main>
+    <div id="map" class="map"></div>
 
-    <script type="module" src="js/main.js"></script>
+    <div id="data"></div>
+
+    <footer class="app-footer">
+      Donnees <a href="https://www.prevision-meteo.ch" target="_blank" rel="noopener">prevision-meteo.ch</a>,
+      fond de carte OpenStreetMap
+    </footer>
   </body>
 </html>

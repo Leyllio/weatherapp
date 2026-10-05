@@ -1,45 +1,28 @@
 /**
- * Text normalisation helpers.
- *
- * The UI font has no glyph for accented characters, so every string that
- * reaches the DOM is transliterated before rendering.
+ * Helpers de texte partages par la couche de donnees et celle du rendu.
  */
 
-/** Removes diacritics and expands ligatures, keeping every other character. */
-function deaccent(text) {
+/**
+ * Enleve les diacritiques : la police du bandeau n'a pas de glyphe accentue, et
+ * un caractere manquant s'affiche en carre vide. Le degre est conserve, il est
+ * indispensable pour lire une temperature.
+ */
+export function toAscii(text) {
   return String(text)
     .normalize("NFD")
     .replace(/\p{M}/gu, "")
-    .replace(/\u0153/g, "oe")
-    .replace(/\u0152/g, "OE")
-    .replace(/\u00c6/g, "AE")
-    .replace(/\u00e6/g, "ae");
+    .replace(/[^\x20-\x7e°]/g, "");
 }
 
 /**
- * Produces a font-safe string: no diacritics and no exotic punctuation.
- * The degree sign is kept because it is required to read a temperature.
- */
-export function toAscii(text) {
-  return deaccent(text).replace(/[^\x20-\x7e\u00b0]/g, "");
-}
-
-/** Lowercase, diacritic-free lookup key used to match city names. */
-export function toSlug(text) {
-  return deaccent(text).toLowerCase().trim();
-}
-
-/**
- * Uppercases the first letter and leaves the rest untouched.
+ * Met en majuscule la premiere lettre d'un nom, et celle de chaque particule.
  *
- * The city index stores names the way their postal service writes them, so some
- * start lowercase and some start with a leading article apostrophe, as in
- * `'s Gravenvoeren`. Leading punctuation is skipped so the first letter is what
- * gets capitalised, not the apostrophe before it.
+ * La saisie est libre : `saint-germain-en-laye` doit s'afficher
+ * `Saint-Germain-En-Laye`. L'index de villes de la branche principale ecrit les
+ * noms comme leur service postal, certains en minuscules et certains avec une
+ * apostrophe en tete, comme `'s Gravenvoeren` : la regex saute donc la
+ * ponctuation initiale et met en majuscule la lettre qui suit.
  */
 export function capitalize(text) {
-  const value = String(text);
-  const index = value.search(/\p{L}/u);
-  if (index < 0) return value;
-  return value.slice(0, index) + value[index].toLocaleUpperCase("fr") + value.slice(index + 1);
+  return String(text).replace(/(^|[\s'-])(\p{L})/gu, (_, before, letter) => before + letter.toLocaleUpperCase("fr"));
 }

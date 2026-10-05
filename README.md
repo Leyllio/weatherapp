@@ -1,52 +1,49 @@
-# WeatherApp
+# WeatherApp - SPA a la main
 
-A single-page weather application built with vanilla HTML, CSS and JavaScript modules. No framework, no build step, no dependencies.
+Exercice « Une Single-Page Application à la main ». Une page HTML, du CSS, des modules ES, aucun framework, aucune étape de build.
 
-Search any of the 45,174 indexed cities, then read current conditions, a five-day overview and an hourly strip.
+Le squelette imposé est respected : un champ de saisie et un bouton `afficher` dans `#menu`, et un conteneur `#data` que l'application remplit avec les données téléchargées.
 
-## Features
+## Fonctionnement
 
-- **City search** over a local index, with diacritic-insensitive matching and keyboard navigation (`ArrowUp`, `ArrowDown`, `Enter`, `Escape`).
-- **Current conditions**: temperature, apparent temperature, condition, wind, humidity, pressure, sunrise and sunset, coordinates and elevation.
-- **Five-day overview** spread evenly across the full width, no horizontal scrolling.
-- **Hourly strip** for the next 24 hours: reflowing cells on desktop, a vertical scrollable list on a phone.
-- **Local weather pictograms**, drawn as CSS masks so the theme colours them and nothing is fetched from a CDN.
-- **Light and dark themes**, following the OS preference on first visit and persisted afterwards.
-- **Rain animation** on the wordmark, on hover only, and disabled under `prefers-reduced-motion`.
+Le bouton `afficher` (ou la touche Entree) demande le flux JSON de [prevision-meteo.ch](https://www.prevision-meteo.ch) pour le nom saisi, puis peint trois sections dans `#data` : conditions actuelles, cinq jours, et les 24 heures du jour. Un clic sur la carte fait la même chose pour les coordonnées cliquées, et le lieu est nommé via Nominatim.
 
-## Running
+## Données
 
-The app uses ES modules, so it must be served over HTTP rather than opened from the filesystem.
+Une seule URL, qui accepte une ville ou un point :
+
+```
+https://www.prevision-meteo.ch/services/json/<ville>
+https://www.prevision-meteo.ch/services/json/lat=46.99lng=6.93
+```
+
+La ville est normalisée en minuscules sans accents ni espaces (`Saint-Germain-en-Laye` devient `saint-germain-en-laye`). Le service repond en `200` avec un champ `errors` quand la cible est inconnue, ce qui est le seul signe fiable d'echec : `js/weather.js` le verifie avant de convertir la reponse.
+
+Le fond de carte vient d'OpenStreetMap, et le nom des points cliques de l'API de geocodage inverse Nominatim, qui impose un identifiant et refuse les appels repetes. Les deux sont optionnels : sans eux l'application affiche encore la meteo du point.
+
+## Fichiers
+
+| Chemin | Role |
+| --- | --- |
+| `index.html` | Squelette impose et bandeau |
+| `css/style.css` | Charte graphique : jetons, themes, composants, adaptations |
+| `js/weather.js` | Flux JSON, normalisation des donnees, mapping des icones |
+| `js/view.js` | Rendu des sections dans `#data` |
+| `js/map.js` | Carte Leaflet, marqueur, cadrage |
+| `js/main.js` | Controleur : evenements, chargement, nommage des points |
+| `js/theme.js` | Theme jour/nuit, memorise |
+| `js/rain.js` | Pluie sur le mot-symbole, au survol seulement |
+
+## Lancer
+
+Les modules ES demandent HTTP, pas `file://` :
 
 ```bash
 python3 -m http.server 8000
 ```
 
-Then open <http://localhost:8000>.
+Puis <http://localhost:8000>.
 
-## Data
+## Note
 
-Weather data comes from [Open-Meteo](https://open-meteo.com), under the terms of their [licence](https://open-meteo.com/en/terms): free for non-commercial use, no API key, and CORS enabled. Please keep the attribution link when reusing this project.
-
-Two requests are made per city: a geocoding lookup for its coordinates, then a forecast for those coordinates. Both answer in a few hundred milliseconds.
-
-`data/cities.txt` is a tab-separated index of 45,174 cities used to power the search suggestions offline. It was generated once from an upstream city list and committed so a fresh clone runs without extra setup; the coordinates shown in the current conditions card are re-resolved through Open-Meteo geocoding.
-
-## Layout
-
-| Path | Role |
-| --- | --- |
-| `index.html` | Page shell: banner, search combobox, mount point |
-| `css/style.css` | Design tokens, theming, layout, components, responsive rules |
-| `js/text.js` | Diacritic stripping and slug generation |
-| `js/dom.js` | `el()` element builder, icon and pictogram helpers |
-| `js/cities.js` | City index loading, ranking and lookup |
-| `js/weather.js` | Geocoding and forecast access, cache, WMO code mapping, payload shaping |
-| `js/render.js` | View functions, one per section |
-| `js/theme.js` | Theme resolution and persistence |
-| `js/rain.js` | Rain particle generation for the wordmark |
-| `js/main.js` | Controller: events, request lifecycle, rendering |
-
-## Notes on performance
-
-Latency is managed in `js/weather.js` with an in-memory cache mirrored into `sessionStorage`, request de-duplication, prefetching on suggestion hover, cancellation of abandoned requests, and a two-phase paint that shows cached data immediately. A 15 second ceiling on each request keeps a dead connection from leaving the interface waiting.
+La police du bandeau n'a pas de glyphe accentue : `js/view.js` retire les diacritiques de tout texte affiche, le signe degre etant conserve pour lire une temperature.
