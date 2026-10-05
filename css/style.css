@@ -859,20 +859,25 @@ button:hover {
    9. Floating map
    ========================================================================== */
 
-/* The corner the panel and its button share, clear of the page content. */
+/* The corner the panel and its button share, clear of the page content.
+   `--map-keep-out` is the strip a panel must leave free above itself, so the
+   toggle button, which floats there, stays on screen at any size. */
 :root {
-  --map-inset: 1.25rem;
+  --map-inset-x: max(0.75rem, env(safe-area-inset-right, 0px));
+  --map-inset-y: max(0.75rem, env(safe-area-inset-bottom, 0px));
+  --map-toggle: 3rem;
+  --map-gap: 0.5rem;
 
-  /* Both panel sizes, kept as tokens so the button can match the small one. */
-  --map-mini: 12rem;
-  --map-full: 88vmin;
+  /* The square is capped against the shortest viewport axis, so it never
+     swallows a landscape phone, where 12rem would be the whole screen. */
+  --map-mini: min(12rem, 42vmin);
   --map-ease: 260ms;
 }
 
 .map-dock {
   position: fixed;
-  right: var(--map-inset);
-  bottom: var(--map-inset);
+  right: var(--map-inset-x);
+  bottom: var(--map-inset-y);
   z-index: 30;
 }
 
@@ -885,18 +890,19 @@ button:hover {
 .map-dock-toggle {
   display: grid;
   place-items: center;
-  width: 3rem;
-  height: 3rem;
+  width: var(--map-toggle);
+  height: var(--map-toggle);
   padding: 0;
   border-radius: 50%;
 }
 
 /* Out of the flow and above the panel while it is open, so the button stays
-   reachable and never covers the map it opened. */
+   reachable and never covers the map it opened. It rides along with the panel's
+   bottom edge, which is what keeps both inside the viewport as the panel grows. */
 .map-dock-toggle[aria-expanded="true"] {
   position: absolute;
   right: 0;
-  bottom: calc(100% + 0.5rem);
+  bottom: calc(100% + var(--map-gap));
 }
 
 .map-dock-glyph {
@@ -920,10 +926,17 @@ button:hover {
     height var(--map-ease) ease;
 }
 
-/* Full viewport minus the inset, so the panel never sits under a screen edge. */
+/* Full viewport, minus the inset all round and, on the way up, the strip the
+   toggle needs to stay on screen: the panel is anchored bottom right, so its top
+   edge is what has to clear the button. `dvh` follows the mobile URL bar as it
+   collapses, `svh` never exceeds the smallest viewport. */
 .map-dock-panel[data-size="full"] {
-  width: min(var(--map-full), calc(100vw - 2 * var(--map-inset)));
-  height: min(var(--map-full), calc(100vh - 2 * var(--map-inset)));
+  --map-keep-out: calc(var(--map-inset-y) + var(--map-toggle) + var(--map-gap));
+
+  width: 100vw;
+  height: calc(100dvh - var(--map-inset-y) - var(--map-keep-out));
+  max-width: calc(100vw - 2 * var(--map-inset-x));
+  max-height: calc(100svh - var(--map-keep-out));
 }
 
 .map-dock-map {
@@ -931,12 +944,14 @@ button:hover {
   height: 100%;
 }
 
-/* Above the map, in the corner that Leaflet leaves for its own zoom control. */
+/* Above the map, in the corner that Leaflet leaves for its own zoom control.
+   Leaflet stacks its panes and its control container from 400 to 1000, so this
+   has to clear 1000 to stay clickable once the tiles are painted. */
 .map-dock-expand {
   position: absolute;
   top: 0.5rem;
   right: 0.5rem;
-  z-index: 10;
+  z-index: 1001;
   padding: 0.25rem 0.5rem;
   font-size: 0.75rem;
 }
@@ -945,10 +960,30 @@ button:hover {
   font-size: 0.625rem;
 }
 
+/* A phone has no hover and no room to spare: the square shrinks. The toggle keeps
+   its place above the panel, which is the only spot that stays on screen once the
+   panel is a screen wide. */
 @media (max-width: 700px) {
   :root {
-    --map-mini: 10rem;
-    --map-inset: 0.75rem;
+    --map-mini: min(10rem, 38vmin);
+    --map-toggle: 2.75rem;
+  }
+}
+
+/* Landscape on a phone: height is the scarce axis, so keep the square small
+   enough that some of the weather stays readable behind it. */
+@media (max-height: 500px) and (orientation: landscape) {
+  :root {
+    --map-mini: min(9rem, 34vmin);
+  }
+}
+
+/* A finger needs a bigger target than a cursor: the label button is sized from
+   its own padding rather than the font, so it keeps a comfortable height. */
+@media (pointer: coarse) {
+  .map-dock-expand {
+    min-height: 2.75rem;
+    padding: 0 0.75rem;
   }
 }
 
